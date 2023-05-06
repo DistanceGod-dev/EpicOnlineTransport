@@ -2,14 +2,15 @@
 using Epic.OnlineServices.P2P;
 using System;
 using System.Collections.Generic;
+using Mirror;
 using UnityEngine;
 
 namespace EpicTransport {
     public class Server : Common {
         private event Action<int> OnConnected;
-        private event Action<int, byte[], int> OnReceivedData;
+        private event Action<int, ArraySegment<byte>, int> OnReceivedData;
         private event Action<int> OnDisconnected;
-        private event Action<int, Exception> OnReceivedError;
+        private event Action<int, TransportError, string> OnReceivedError;
 
         private BidirectionalDictionary<ProductUserId, int> epicToMirrorIds;
         private Dictionary<ProductUserId, SocketId> epicToSocketIds;
@@ -21,8 +22,8 @@ namespace EpicTransport {
 
             s.OnConnected += (id) => transport.OnServerConnected.Invoke(id);
             s.OnDisconnected += (id) => transport.OnServerDisconnected.Invoke(id);
-            s.OnReceivedData += (id, data, channel) => transport.OnServerDataReceived.Invoke(id, new ArraySegment<byte>(data), channel);
-            s.OnReceivedError += (id, exception) => transport.OnServerError.Invoke(id, exception);
+            s.OnReceivedData += (id, data, channel) => transport.OnServerDataReceived.Invoke(id,data, channel);
+            s.OnReceivedError += (id, _transport, exception) => transport.OnServerError.Invoke(id, _transport, exception);
 
             if (!EOSSDKComponent.Initialized) {
                 Debug.LogError("EOS not initialized.");
@@ -38,22 +39,27 @@ namespace EpicTransport {
             nextConnectionID = 1;
         }
 
-        protected override void OnNewConnection(OnIncomingConnectionRequestInfo result) {
+        protected override void OnNewConnection(ref OnIncomingConnectionRequestInfo result) {
             if (ignoreAllMessages) {
                 return;
             }
 
-            if (deadSockets.Contains(result.SocketId.SocketName)) {
+            if (deadSockets.Contains(result.SocketId?.SocketName)) {
                 Debug.LogError("Received incoming connection request from dead socket");
                 return;
             }
 
-            EOSSDKComponent.GetP2PInterface().AcceptConnection(
-                new AcceptConnectionOptions() {
+            var opations = new AcceptConnectionOptions()
+            {
                 LocalUserId = EOSSDKComponent.LocalUserProductId,
                 RemoteUserId = result.RemoteUserId,
                 SocketId = result.SocketId
-                });
+            };
+            var acceptConnectionResult =  EOSSDKComponent.GetP2PInterface().AcceptConnection(ref opations);
+            if (acceptConnectionResult != Result.Success)
+            {
+                Debug.Log("----------------------- EOSSDKComponent.GetP2PInterface().AcceptConnection(----------------------------------"+acceptConnectionResult);
+            }
         }
 
         protected override void OnReceiveInternalData(InternalMessages type, ProductUserId clientUserId, SocketId socketId) {
@@ -77,7 +83,7 @@ namespace EpicTransport {
                     epicToSocketIds.Add(clientUserId, socketId);
                     OnConnected.Invoke(connectionId);
 
-                    string clientUserIdString;
+                    Utf8String clientUserIdString;
                     clientUserId.ToString(out clientUserIdString);
                     Debug.Log($"Client with Product User ID {clientUserIdString} connected. Assigning connection id {connectionId}");
                     break;
@@ -89,7 +95,7 @@ namespace EpicTransport {
                         epicToSocketIds.Remove(clientUserId);
                         Debug.Log($"Client with Product User ID {clientUserId} disconnected.");
                     } else {
-                        OnReceivedError.Invoke(-1, new Exception("ERROR Unknown Product User ID"));
+                        OnReceivedError.Invoke(-1, TransportError.InvalidReceive,  ("ERROR Unknown Product User ID"));
                     }
 
                     break;
@@ -111,11 +117,11 @@ namespace EpicTransport {
                 epicToSocketIds.TryGetValue(clientUserId, out socketId);
                 CloseP2PSessionWithUser(clientUserId, socketId);
 
-                string productId;
+                Utf8String productId;
                 clientUserId.ToString(out productId);
 
                 Debug.LogError("Data received from epic client thats not known " + productId);
-                OnReceivedError.Invoke(-1, new Exception("ERROR Unknown product ID"));
+                OnReceivedError.Invoke(-1, TransportError.Unexpected, ("ERROR Unknown product ID"));
             }
         }
 
@@ -152,19 +158,19 @@ namespace EpicTransport {
                 Send(userId, socketId, data, (byte)channelId);
             } else {
                 Debug.LogError("Trying to send on unknown connection: " + connectionId);
-                OnReceivedError.Invoke(connectionId, new Exception("ERROR Unknown Connection"));
+                OnReceivedError.Invoke(connectionId, TransportError.Unexpected,  ("ERROR Unknown Connection"));
             }
 
         }
 
         public string ServerGetClientAddress(int connectionId) {
             if (epicToMirrorIds.TryGetValue(connectionId, out ProductUserId userId)) {
-                string userIdString;
+                Utf8String userIdString;
                 userId.ToString(out userIdString);
                 return userIdString;
             } else {
                 Debug.LogError("Trying to get info on unknown connection: " + connectionId);
-                OnReceivedError.Invoke(connectionId, new Exception("ERROR Unknown Connection"));
+                OnReceivedError.Invoke(connectionId, TransportError.Unexpected,  ("ERROR Unknown Connection"));
                 return string.Empty;
             }
         }

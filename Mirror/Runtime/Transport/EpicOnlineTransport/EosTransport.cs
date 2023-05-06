@@ -1,6 +1,4 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
+using System; 
 using UnityEngine;
 using Epic.OnlineServices.P2P;
 using Epic.OnlineServices;
@@ -57,7 +55,10 @@ namespace EpicTransport {
         }
 
         public override void ClientEarlyUpdate() {
-            EOSSDKComponent.Tick();
+            if (EOSSDKComponent.Initialized)
+            {
+                EOSSDKComponent.Tick();
+            }
 
             if (activeNode != null) {
                 ignoreCachedMessagesTimer += Time.deltaTime;
@@ -87,7 +88,10 @@ namespace EpicTransport {
         public override void ClientLateUpdate() {}
 
         public override void ServerEarlyUpdate() {
-            EOSSDKComponent.Tick();
+            if (EOSSDKComponent.Initialized)
+            {
+                EOSSDKComponent.Tick();
+            }
 
             if (activeNode != null) {
                 ignoreCachedMessagesTimer += Time.deltaTime;
@@ -135,7 +139,7 @@ namespace EpicTransport {
                     sessionOptions.DisplayName = EOSSDKComponent.DisplayName;
                     sessionOptions.GameSessionId = null;
                     sessionOptions.ServerIp = null;
-                    Result result = EOSSDKComponent.GetMetricsInterface().BeginPlayerSession(sessionOptions);
+                    Result result = EOSSDKComponent.GetMetricsInterface().BeginPlayerSession(ref sessionOptions);
 
                     if(result == Result.Success) {
                         Debug.Log("Started Metric Session");
@@ -193,7 +197,7 @@ namespace EpicTransport {
                     sessionOptions.DisplayName = EOSSDKComponent.DisplayName;
                     sessionOptions.GameSessionId = null;
                     sessionOptions.ServerIp = null;
-                    Result result = EOSSDKComponent.GetMetricsInterface().BeginPlayerSession(sessionOptions);
+                    Result result = EOSSDKComponent.GetMetricsInterface().BeginPlayerSession(ref sessionOptions);
 
                     if (result == Result.Success) {
                         Debug.Log("Started Metric Session");
@@ -269,7 +273,7 @@ namespace EpicTransport {
                 // Stop Metrics collection session
                 EndPlayerSessionOptions endSessionOptions = new EndPlayerSessionOptions();
                 endSessionOptions.AccountId = EOSSDKComponent.LocalUserAccountId;
-                Result result = EOSSDKComponent.GetMetricsInterface().EndPlayerSession(endSessionOptions);
+                Result result = EOSSDKComponent.GetMetricsInterface().EndPlayerSession(ref endSessionOptions);
 
                 if (result == Result.Success) {
                     Debug.LogError("Stopped Metric Session");
@@ -315,7 +319,7 @@ namespace EpicTransport {
             SetRelayControlOptions setRelayControlOptions = new SetRelayControlOptions();
             setRelayControlOptions.RelayControl = relayControl;
 
-            EOSSDKComponent.GetP2PInterface().SetRelayControl(setRelayControlOptions);
+            EOSSDKComponent.GetP2PInterface().SetRelayControl(ref setRelayControlOptions);
         }
 
         public void ResetIgnoreMessagesAtStartUpTimer() {
